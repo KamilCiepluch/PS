@@ -1,10 +1,8 @@
 package org.example;
 
-
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
-
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
@@ -14,8 +12,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class ClientAPI {
-
-
     InetAddress address;
     int port;
     JSONObject licence;
@@ -36,6 +32,7 @@ public class ClientAPI {
         token = null;
         if(renewalThread != null && renewalThread.isAlive())
         {
+            renewalThread.interrupt();
             try {
                 renewalThread.join();
             }catch (Exception e)
@@ -54,17 +51,16 @@ public class ClientAPI {
 
     private void sendData( Socket socket) throws IOException
     {
-        String jsonString = licence.toString(); // Konwertuj obiekt JSON na String
+        String jsonString = licence.toString();
         DataOutputStream send = new DataOutputStream(socket.getOutputStream());
         send.write(jsonString.getBytes(), 0, jsonString.length());
     }
     private JSONObject receiveToken(Socket socket) throws IOException, ParseException {
 
         DataInputStream dis = new DataInputStream(socket.getInputStream());
-        byte[] buffer = new byte[1024]; // Załóżmy, że wiadomość JSON nie przekroczy 1024 bajtów
+        byte[] buffer = new byte[1024]; // json size is 1024 bytes or less
         int length = dis.read(buffer);
         String jsonMessage = new String(buffer, 0, length);
-
         JSONObject jsonObject = (JSONObject) new JSONParser().parse(jsonMessage);
         return jsonObject;
     }
@@ -80,7 +76,6 @@ public class ClientAPI {
         while (isTokenValid())
         {
             try {
-
                 DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
                 LocalDateTime expiredTime = LocalDateTime.parse((String)token.get("Expired"), formatter);
                 LocalDateTime currentDateTime = LocalDateTime.now();
@@ -91,14 +86,11 @@ public class ClientAPI {
                 Socket clientSocket = new Socket(address,port);
                 sendData(clientSocket);
                 token = receiveToken(clientSocket);
-                System.out.println("Token " + token);
-                System.out.println("I tried to renew licence");
-                if(!isTokenValid())
-                {
+                if(!isTokenValid()) {
                     System.out.println(token.get("Description"));
                 }
                 clientSocket.close();
-            }
+            }catch (InterruptedException ignored) {}
             catch (SocketException socketException)
             {
                 token = null;
@@ -107,10 +99,7 @@ public class ClientAPI {
             catch (Exception e) {
                 System.out.println("renew Licence Thread exception: " + e.getMessage());
             }
-
-
         }
-
     }
 
     public JSONObject getLicenceToken()
@@ -138,7 +127,6 @@ public class ClientAPI {
             catch (Exception e){
                 System.out.println("getLicecne: " + e.getMessage());
             }
-
         }
         else{
             System.out.println("License is valid! Licence expired time " + token.get("Expired"));
@@ -158,7 +146,7 @@ public class ClientAPI {
             api.getLicenceToken();
         }catch (Exception e)
         {
-            System.out.println("XDDDDDDD" + e.getMessage());
+            System.out.println("main error: " + e.getMessage());
         }
 
 

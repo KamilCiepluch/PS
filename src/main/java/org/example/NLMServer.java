@@ -1,7 +1,4 @@
 package org.example;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -25,12 +22,8 @@ public class NLMServer extends Thread {
     private static int port = defaultPortNumber;
 
 
-
-
-
     ArrayList<License> licenses;
     final List<LicenseInUse> activeLicenses = Collections.synchronizedList(new ArrayList<>());
-
 
 
 
@@ -45,9 +38,7 @@ public class NLMServer extends Thread {
             this.serverSocket = new ServerSocket();
             this.activeThreads = new ArrayList<>();
             this.gui2 = gui2;
-
             licenses = getLicencesArray("payload");
-            //activeLicenses = Collections.synchronizedList(new ArrayList<>());
         }
         catch (Exception e)
         {
@@ -78,23 +69,21 @@ public class NLMServer extends Thread {
             gui2.addNewLog("Bind failed");
             closeServer();
         }
-
-
     }
+
+
     public  void closeServer()
     {
-            try {
-                server.getServerSocket().close();
-                Thread.sleep(1000);
-            }
-            catch (Exception e)
-            {
-                System.out.println("Could not close server socket: ");
-                gui2.addNewLog("Could not close server socket: ");
-            }
-
-            port = defaultPortNumber;
-
+        try {
+            server.getServerSocket().close();
+            Thread.sleep(1000);
+        }
+        catch (Exception e)
+        {
+            System.out.println("Could not close server socket: ");
+            gui2.addNewLog("Could not close server socket: ");
+        }
+        port = defaultPortNumber;
     }
 
 
@@ -104,7 +93,6 @@ public class NLMServer extends Thread {
         String jsonString = json.toString(); // Konwertuj obiekt JSON na String
         DataOutputStream send = new DataOutputStream(socket.getOutputStream());
         send.write(jsonString.getBytes(), 0, jsonString.length());
-        gui2.addNewLog("Wysłałem wiadomość");
     }
 
     public String generateLicenseKey(String licenseUserName) {
@@ -121,48 +109,40 @@ public class NLMServer extends Thread {
     void NMLThread(Socket socket) throws IOException, ParseException
     {
         DataInputStream dis = new DataInputStream(socket.getInputStream());
-        byte[] buffer = new byte[1024]; // Załóżmy, że wiadomość JSON nie przekroczy 1024 bajtów
+        byte[] buffer = new byte[1024]; //json has max 1024 bytes
         int length = dis.read(buffer);
         String jsonMessage = new String(buffer, 0, length);
         JSONObject jsonObject = (JSONObject) new JSONParser().parse(jsonMessage);
 
-
-        System.out.println(jsonObject);
 
         String userName = jsonObject.get("LicenceUserName").toString();
         String licenceKey = jsonObject.get("LicenceKey").toString();
 
         JSONObject serverRespondJson = new JSONObject();
         serverRespondJson.put("LicenceUserName", userName);
-        if(!validateLicenceKey(userName,licenceKey))
-        {
+
+        if(!validateLicenceKey(userName,licenceKey)) {
             serverRespondJson.put("Licence", false);
             serverRespondJson.put("Description", "Not valid licence key");
         }
-        else
-        {
-            if(userHaveLicense(userName))
-            {
+        else {
+            if(userHaveLicense(userName)) {
                 License userLicense = getUserLicense(userName);
                 List<LicenseInUse> list = getUserActiveLicenses(userName);
-                // istnieje wolna licencja
                 if(list.isEmpty())
                 {
                     String expiredTime = createExpiredTime(userLicense.getValidationTime());
-                    synchronized (activeLicenses)
-                    {
+                    synchronized (activeLicenses) {
                         activeLicenses.add(new LicenseInUse(userLicense.getLicenseUserName(),expiredTime));
                     }
 
                     serverRespondJson.put("Licence", true);
                     serverRespondJson.put("Expired", expiredTime);
                 }
-                else
-                {
+                else {
                     serverRespondJson.put("Licence", false);
                     serverRespondJson.put("Description", "All licenses are already taken");
                 }
-
             }
             // There's no license for user
             else{
@@ -171,7 +151,6 @@ public class NLMServer extends Thread {
             }
 
         }
-        gui2.addNewLog("I send respond" + serverRespondJson);;
         sendMsg(socket, serverRespondJson);
         socket.close();
     }
@@ -194,22 +173,22 @@ public class NLMServer extends Thread {
 
     public void updateLicenses()
     {
-        System.out.println("Thread is alive");
-        while (!server.getServerSocket().isClosed())
-        {
+        while (!server.getServerSocket().isClosed()) {
             removeAllExpiredLicense();
-
             try {
                 sleep(10);
             }catch (Exception ignored){}
 
         }
-        System.out.println("Thread is dead");
     }
 
 
     public void showActiveLicenses()
     {
+        if(activeLicenses.isEmpty()) {
+            gui2.addNewLog("There is no active licenses");
+        }
+
         for(LicenseInUse license:activeLicenses)
         {
             gui2.addNewLog(license.licenseUserName);
@@ -225,62 +204,50 @@ public class NLMServer extends Thread {
 
     @Override
     public void run() {
-            gui2.addNewLog("Waiting for client");
-            Runnable updateTask = this::updateLicenses;
-            Thread updateListThread = new Thread(updateTask);
-            updateListThread.start();
-            while (!server.getServerSocket().isClosed())
-            {
-                try {
-                    System.out.println("Server closed?: " + serverSocket.isClosed());
-                    Socket socket = server.getServerSocket().accept();
-
-                    gui2.addNewLog("New client accepted: " + socket.getInetAddress().getHostAddress() + ":" +socket.getPort());
-
-
-                    // Todo rządanie od klienta (Watek mls)
-                    Thread task = new Thread(() -> {
-                        try {
-                            NMLThread(socket);
-                        }
-                        catch (Exception  e) {
-                            System.out.println(e.getMessage());
-                        }
-                    });
-                    task.start();
-                    activeThreads.add(task);
-
-                }
-                catch (SocketException ignored) {
-
-                }
-                catch (IOException exception)
-                {
-                    gui2.addNewLog("Client could not connect: " + exception.getMessage());
-                    gui2.addNewLog(exception.toString());
-                }
-
-            }
-
-
+        //gui2.addNewLog("Waiting for client");
+        Runnable updateTask = this::updateLicenses;
+        Thread updateListThread = new Thread(updateTask);
+        updateListThread.start();
+        while (!server.getServerSocket().isClosed()) {
             try {
-                updateListThread.join();
-            }catch (Exception e)
-            {
-                System.out.println("Update Licenses Thread exception: " + e.getMessage());
+                Socket socket = server.getServerSocket().accept();
+                gui2.addNewLog("New client accepted: " + socket.getInetAddress().getHostAddress() + ":" +socket.getPort());
+                Thread task = new Thread(() -> {
+                    try {
+                        NMLThread(socket);
+                    }
+                    catch (IOException| ParseException  e) {
+                        try {
+                            socket.close();
+                        } catch (IOException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+                });
+                task.start();
+                activeThreads.add(task);
             }
+            catch (SocketException ignored) {}
+            catch (IOException exception) {
+                gui2.addNewLog("Client could not connect: " + exception.getMessage());
+                gui2.addNewLog(exception.toString());
+            }
+        }
 
 
+        try {
+            updateListThread.join();
+        }
+        catch (Exception e) {
+            System.out.println("Update Licenses Thread exception: " + e.getMessage());
+        }
 
 
-
-        for(Thread thread: activeThreads)
-        {
+        for(Thread thread: activeThreads) {
             try {
                 thread.join();
             }
-            catch (Exception e)
-            {
+            catch (Exception e) {
                 System.out.println("Could not join thread");
             }
         }
