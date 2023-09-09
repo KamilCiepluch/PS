@@ -29,7 +29,7 @@ public class NLMServer extends Thread {
 
 
     ArrayList<License> licenses;
-    List<LicenseInUse> activeLicenses;
+    final List<LicenseInUse> activeLicenses = Collections.synchronizedList(new ArrayList<>());
 
 
 
@@ -47,7 +47,7 @@ public class NLMServer extends Thread {
             this.gui2 = gui2;
 
             licenses = getLicencesArray("payload");
-            activeLicenses = Collections.synchronizedList(new ArrayList<>());
+            //activeLicenses = Collections.synchronizedList(new ArrayList<>());
         }
         catch (Exception e)
         {
@@ -149,7 +149,11 @@ public class NLMServer extends Thread {
                 if(list.isEmpty())
                 {
                     String expiredTime = createExpiredTime(userLicense.getValidationTime());
-                    activeLicenses.add(new LicenseInUse(userLicense.getLicenseUserName(),expiredTime));
+                    synchronized (activeLicenses)
+                    {
+                        activeLicenses.add(new LicenseInUse(userLicense.getLicenseUserName(),expiredTime));
+                    }
+
                     serverRespondJson.put("Licence", true);
                     serverRespondJson.put("Expired", expiredTime);
                 }
@@ -176,30 +180,31 @@ public class NLMServer extends Thread {
     public synchronized void removeAllExpiredLicense()
     {
         List<LicenseInUse> validLicenses = new ArrayList<>();
-        for(LicenseInUse license: activeLicenses)
-        {
+        for (LicenseInUse license : activeLicenses) {
             DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
             LocalDateTime expiredTime = LocalDateTime.parse(license.getExpiredTime(), formatter);
             LocalDateTime currentDateTime = LocalDateTime.now();
-            if(currentDateTime.isBefore(expiredTime))
-            {
+            if (currentDateTime.isBefore(expiredTime)) {
                 validLicenses.add(license);
             }
         }
-        activeLicenses = validLicenses;
+        activeLicenses.clear();
+        activeLicenses.addAll(validLicenses);
     }
 
     public void updateLicenses()
     {
-        while (server.isAlive() && !serverSocket.isClosed())
+        System.out.println("Thread is alive");
+        while (!server.getServerSocket().isClosed())
         {
             removeAllExpiredLicense();
 
             try {
-                sleep(50);
+                sleep(10);
             }catch (Exception ignored){}
 
         }
+        System.out.println("Thread is dead");
     }
 
 

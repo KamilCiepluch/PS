@@ -1,7 +1,6 @@
 package org.example;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -9,6 +8,10 @@ import org.json.simple.parser.ParseException;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class ClientAPI {
 
@@ -17,6 +20,7 @@ public class ClientAPI {
     int port;
     JSONObject licence;
     JSONObject token;
+    Thread renewalThread;
 
     public void start(InetAddress address, int port)
     {
@@ -29,6 +33,16 @@ public class ClientAPI {
         address = null;
         port = 0;
         licence = null;
+        token = null;
+        if(renewalThread != null && renewalThread.isAlive())
+        {
+            try {
+                renewalThread.join();
+            }catch (Exception e)
+            {
+                System.out.println("Could not join thread");
+            }
+        }
     }
 
     public void setLicence(String userName, String licenceKey)
@@ -61,26 +75,78 @@ public class ClientAPI {
         else return (boolean) token.get("Licence");
     }
 
-    public JSONObject getLicenceToken()
+    private void renewLicence()
     {
-        try {
-            Socket clientSocket = new Socket(address,port);
-            if(!isTokenValid())
-            {
+        while (isTokenValid())
+        {
+            try {
+
+                DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+                LocalDateTime expiredTime = LocalDateTime.parse((String)token.get("Expired"), formatter);
+                LocalDateTime currentDateTime = LocalDateTime.now();
+                long timeDiff = Duration.between(currentDateTime,expiredTime).getSeconds();
+                System.out.println(timeDiff);
+                Thread.sleep((timeDiff+1) *1000);
+
+                Socket clientSocket = new Socket(address,port);
                 sendData(clientSocket);
                 token = receiveToken(clientSocket);
-                if(isTokenValid())
+                System.out.println("Token " + token);
+                System.out.println("I tried to renew licence");
+                if(!isTokenValid())
                 {
-                    System.out.println("License is valid! Ex");
+                    System.out.println(token.get("Description"));
                 }
-                System.out.println(token.get("Description"));
-
+                clientSocket.close();
             }
-            System.out.println("XD");
+            catch (SocketException socketException)
+            {
+                token = null;
+                System.out.println("Could not connect to server");
+            }
+            catch (Exception e) {
+                System.out.println("renew Licence Thread exception: " + e.getMessage());
+            }
 
-        }catch (Exception e){}
-        return null;
+
+        }
+
     }
+
+    public JSONObject getLicenceToken()
+    {
+        if(!isTokenValid())
+        {
+            try {
+                Socket clientSocket = new Socket(address,port);
+                sendData(clientSocket);
+                token = receiveToken(clientSocket);
+                if(isTokenValid()) {
+                    System.out.println("License is valid! Licence expired time " + token.get("Expired"));
+                    renewalThread = new Thread(this::renewLicence);
+                    renewalThread.start();
+                }
+                else {
+                    System.out.println(token.get("Description"));
+                }
+                clientSocket.close();
+
+            }catch (SocketException socketException) {
+                token = null;
+                System.out.println("Could not connect to server");
+            }
+            catch (Exception e){
+                System.out.println("getLicecne: " + e.getMessage());
+            }
+
+        }
+        else{
+            System.out.println("License is valid! Licence expired time " + token.get("Expired"));
+        }
+        return token;
+    }
+
+
 
     public static void main(String[] args) {
         try {
@@ -88,12 +154,11 @@ public class ClientAPI {
             InetAddress address = InetAddress.getByName("localhost");
             int port = 7;
             api.start(address,port);
-            api.setLicence("Radek", "xd");
+            api.setLicence("Radek", "9f3a08745c23449a53fc05d68eda1e1b");
             api.getLicenceToken();
-
         }catch (Exception e)
         {
-
+            System.out.println("XDDDDDDD" + e.getMessage());
         }
 
 
